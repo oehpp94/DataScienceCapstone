@@ -1,0 +1,185 @@
+---
+title: "Data Science Capstone: Milestone Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+This is a course project prelimiary report to show the progress made as well as demonstrate a basic understanding of the concepts learned throughout the Data Science Specialization. Specifically, this assignment evaluates the skills learned in the Getting and cleaning Data and Exploratory Data Analysis courses as they are applied to develop a prediction algorithm and Sniny app.
+
+For the purposes of this project, the SwiftKey dataset downloadable through the following link will be used. Said link will download a zip file containing 4 folders. The data that will be analyzed is the one stored inside the folder called "en_US".
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+Additionally, the following link provides a list of profanity words and phrases which will be used by the model to exclude such words and phrases from its predictions.Said link will download a zip file containing a single text file with a word or phrase per line.
+
+https://www.freewebheaders.com/download/files/full-list-of-bad-words_text-file_2018_07_30.zip
+
+
+
+## Initial Data Processing
+
+
+
+### Loading the Required Data
+
+Accessing and reviewing the SwiftKey english datasets:
+
+```{r message = FALSE, warning = FALSE}
+## Setting Up Session Environment
+library(ngram)
+library(tm)
+library(RWeka)
+library(ggplot2)
+set.seed(50)
+
+## Loading Main Data Files
+blogsFile <- readLines("Coursera-SwiftKey\\final\\en_US\\en_US.blogs.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+newsFile <- readLines("Coursera-SwiftKey\\final\\en_US\\en_US.news.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+twitterFile <- readLines("Coursera-SwiftKey\\final\\en_US\\en_US.twitter.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+
+# Building Raw Data Summary
+rawDataSum <- data.frame("Files" = c("en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt"),
+           "Line Count" = c(length(blogsFile), length(newsFile), length(twitterFile)),
+           "Word Count" = c(wordcount(blogsFile), wordcount(newsFile), wordcount(twitterFile)),
+           "Char Count" = c(sum(nchar(blogsFile)), sum(nchar(newsFile)), sum(nchar(twitterFile))))
+rawDataSum
+```
+
+### Sampling
+
+Constructing the training set which will be used for the exploratory analysis:
+
+```{r message = FALSE, warning = FALSE}
+## Random selection of 2% of Original Files
+blogsSample <- sample(blogsFile, length(blogsFile) * 0.02)
+newsSample <- sample(newsFile, length(newsFile) * 0.02)
+twitterSample <- sample(twitterFile, length(twitterFile) * 0.02)
+trainSet <- c(blogsSample, newsSample, twitterSample)
+
+# Building Training Set Summary
+trainDataSum <- data.frame("Data" = "trainSet",
+           "Line Count" = length(trainSet),
+           "Word Count" = wordcount(trainSet),
+           "Char Count" = sum(nchar(trainSet)))
+trainDataSum
+
+# Save Memory Space
+rm(blogsFile)
+rm(newsFile)
+rm(twitterFile)
+rm(blogsSample)
+rm(newsSample)
+rm(twitterSample)
+```
+
+### Data Cleaning
+
+Manipulating the training set to set it up for analysis
+
+```{r message = FALSE, warning = FALSE}
+## Building Corpus
+trainCorpus <- VCorpus(VectorSource(trainSet))
+
+## Setting Everything to Lower Case, Cleaning Extra White Spaces, and Removing Punctuation and Numbers
+trainCorpus <- tm_map(trainCorpus, content_transformer(tolower))
+trainCorpus <- tm_map(trainCorpus, stripWhitespace)
+trainCorpus <- tm_map(trainCorpus, removePunctuation)
+trainCorpus <- tm_map(trainCorpus, removeNumbers)
+
+#Removing Profanity
+profanity <- read.delim("full-list-of-bad-words_text-file_2018_07_30.txt", sep = ":", header = FALSE)
+profanity <- profanity[,1]
+trainCorpus <- tm_map(trainCorpus, removeWords, profanity)
+```
+
+
+
+## Exploratory Data Analysis
+
+With the cleaned data, basic analysis can be performed. For the purposes of this project, the analysis will consist on discovering the frequencies of different unigrams, bigrams, and trigrams found in the corpus. 
+
+### Unigram Analysis
+
+Tokening, Manipulating, and Graphing of the unigram universe in the corpus
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+uniToken <- function(x) NGramTokenizer(x,Weka_control(min=1,max=1))
+uniTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = uniToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+uniHighFreq <- findFreqTerms(uniTDM, lowfreq = 2000)
+unigrams <- rowSums(as.matrix(uniTDM[uniHighFreq,]))
+unigrams <- data.frame("Term" = names(unigrams), "Frequency" = unigrams)
+unigrams <- unigrams[order(-unigrams$Frequency),]
+
+## Quick Peep of Final Data Frame
+head(unigrams)
+
+## Building the Graph
+unihist <- ggplot(unigrams, aes(x = reorder(unigrams$Term, unigrams$Frequency), y=unigrams$Frequency))
+unihist <- unihist + geom_bar(stat ="Identity", fill = "darkblue")
+unihist <- unihist + labs(title = "Most Frequent Unigrams", x = "Term", y = "Frequency")
+unihist <- unihist + coord_flip()
+unihist
+```
+
+### Bigram Analysis
+
+Tokening, Manipulating, and Graphing of the bigram universe in the corpus
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+biToken <- function(x) NGramTokenizer(x,Weka_control(min=2,max=2))
+biTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = biToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+biHighFreq <- findFreqTerms(biTDM, lowfreq = 675)
+bigrams <- rowSums(as.matrix(biTDM[biHighFreq,]))
+bigrams <- data.frame("Term" = names(bigrams), "Frequency" = bigrams)
+bigrams <- bigrams[order(-bigrams$Frequency),]
+
+## Quick Peep of Final Data Frame
+head(bigrams)
+
+## Building the Graph
+bihist <- ggplot(bigrams, aes(x = reorder(bigrams$Term, bigrams$Frequency), y=bigrams$Frequency))
+bihist <- bihist + geom_bar(stat ="Identity", fill = "darkblue")
+bihist <- bihist + labs(title = "Most Frequent Bigrams", x = "Term", y = "Frequency")
+bihist <- bihist + coord_flip()
+bihist
+```
+
+### Trigram Analysis
+
+Tokening, Manipulating, and Graphing of the trigram universe in the corpus
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+triToken <- function(x) NGramTokenizer(x,Weka_control(min=3,max=3))
+triTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = triToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+triHighFreq <- findFreqTerms(triTDM, lowfreq = 105)
+trigrams <- rowSums(as.matrix(triTDM[triHighFreq,]))
+trigrams <- data.frame("Term" = names(trigrams), "Frequency" = trigrams)
+trigrams <- trigrams[order(-trigrams$Frequency),]
+
+## Quick Peep of Final Data Frame
+head(trigrams)
+
+## Building the Graph
+trihist <- ggplot(trigrams, aes(x = reorder(trigrams$Term, trigrams$Frequency), y=trigrams$Frequency))
+trihist <- trihist + geom_bar(stat ="Identity", fill = "darkblue")
+trihist <- trihist + labs(title = "Most Frequent Trigrams", x = "Term", y = "Frequency")
+trihist <- trihist + coord_flip()
+trihist
+```
+
+
+The analysis performed helps in getting to know the data. This is going to be key in the upcoming development of a text prediction model. 

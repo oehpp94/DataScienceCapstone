@@ -1,0 +1,154 @@
+---
+title: "Data Science Capstone: Final Project Data Set-Up"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Initial Data Processing
+
+
+### Loading the Required Data
+
+```{r message = FALSE, warning = FALSE}
+## Setting Up Session Environment
+library(ngram)
+library(tm)
+library(RWeka)
+library(ggplot2)
+set.seed(50)
+
+## Loading Main Data Files
+blogsFile <- readLines("Milestone Report\\Coursera-SwiftKey\\final\\en_US\\en_US.blogs.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+newsFile <- readLines("Milestone Report\\Coursera-SwiftKey\\final\\en_US\\en_US.news.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+twitterFile <- readLines("Milestone Report\\Coursera-SwiftKey\\final\\en_US\\en_US.twitter.txt", encoding = "UTF-8", warn = FALSE, skipNul = FALSE)
+
+# Building Raw Data Summary
+rawDataSum <- data.frame("Files" = c("en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt"),
+           "Line Count" = c(length(blogsFile), length(newsFile), length(twitterFile)),
+           "Word Count" = c(wordcount(blogsFile), wordcount(newsFile), wordcount(twitterFile)),
+           "Char Count" = c(sum(nchar(blogsFile)), sum(nchar(newsFile)), sum(nchar(twitterFile))))
+```
+
+### Sampling
+
+```{r message = FALSE, warning = FALSE}
+## Random selection of 2% of Original Files
+blogsSample <- sample(blogsFile, length(blogsFile) * 0.02)
+newsSample <- sample(newsFile, length(newsFile) * 0.02)
+twitterSample <- sample(twitterFile, length(twitterFile) * 0.02)
+trainSet <- c(blogsSample, newsSample, twitterSample)
+
+# Building Training Set Summary
+trainDataSum <- data.frame("Data" = "trainSet",
+           "Line Count" = length(trainSet),
+           "Word Count" = wordcount(trainSet),
+           "Char Count" = sum(nchar(trainSet)))
+
+# Save Memory Space
+rm(blogsFile)
+rm(newsFile)
+rm(twitterFile)
+rm(blogsSample)
+rm(newsSample)
+rm(twitterSample)
+```
+
+### Data Cleaning
+
+```{r message = FALSE, warning = FALSE}
+## Building Corpus
+trainCorpus <- VCorpus(VectorSource(trainSet))
+
+## Setting Everything to Lower Case, Cleaning Extra White Spaces, and Removing Punctuation and Numbers
+trainCorpus <- tm_map(trainCorpus, content_transformer(tolower))
+trainCorpus <- tm_map(trainCorpus, stripWhitespace)
+trainCorpus <- tm_map(trainCorpus, removePunctuation)
+trainCorpus <- tm_map(trainCorpus, removeNumbers)
+
+#Removing Profanity
+profanity <- read.delim("Milestone Report\\full-list-of-bad-words_text-file_2018_07_30.txt", sep = ":", header = FALSE)
+profanity <- profanity[,1]
+trainCorpus <- tm_map(trainCorpus, removeWords, profanity)
+```
+
+
+
+## Exploratory Data Analysis
+
+
+### Unigram Analysis
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+uniToken <- function(x) NGramTokenizer(x,Weka_control(min = 1,max = 1))
+uniTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = uniToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+uniHighFreq <- findFreqTerms(uniTDM, lowfreq = 2000)
+unigrams <- rowSums(as.matrix(uniTDM[uniHighFreq,]))
+unigrams <- data.frame("Term" = names(unigrams), "Frequency" = unigrams)
+unigrams <- unigrams[order(-unigrams$Frequency),]
+
+## Manipulating Data Frame to Set Up for Predicting
+unigramFull <- as.character(unigrams$Term)
+unigramFreq <- unigrams$Frequency
+unigramsDF <- cbind(unigramFull, unigramFreq)
+unigramsDF <- head(unigramsDF, 1)
+```
+
+### Bigram Analysis
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+biToken <- function(x) NGramTokenizer(x,Weka_control(min = 2,max = 2))
+biTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = biToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+biHighFreq <- findFreqTerms(biTDM, lowfreq = 325)
+bigrams <- rowSums(as.matrix(biTDM[biHighFreq,]))
+bigrams <- data.frame("Term" = names(bigrams), "Frequency" = bigrams)
+bigrams <- bigrams[order(-bigrams$Frequency),]
+
+## Manipulating Data Frame to Set Up for Predicting
+bigram1 <- sapply(strsplit(as.character(bigrams$Term), " "), "[", 1)
+bigram2 <- sapply(strsplit(as.character(bigrams$Term), " "), "[", 2)
+bigramFull <- as.character(bigrams$Term)
+bigramFreq <- bigrams$Frequency
+bigramsDF <- cbind(bigram1, bigram2, bigramFull, bigramFreq)
+```
+
+### Trigram Analysis
+
+```{r message = FALSE, warning = FALSE}
+## Tokenizing Corpus
+triToken <- function(x) NGramTokenizer(x,Weka_control(min = 3,max = 3))
+triTDM <- TermDocumentMatrix(trainCorpus, control = list(tokenize = triToken))
+
+## Manipulating Tonkenized Corpus to Set Up for Graphing
+triHighFreq <- findFreqTerms(triTDM, lowfreq = 50)
+trigrams <- rowSums(as.matrix(triTDM[triHighFreq,]))
+trigrams <- data.frame("Term" = names(trigrams), "Frequency" = trigrams)
+trigrams <- trigrams[order(-trigrams$Frequency),]
+
+## Manipulating Data Frame to Set Up for Predicting
+trigram1 <- sapply(strsplit(as.character(trigrams$Term), " "), "[", 1)
+trigram2 <- sapply(strsplit(as.character(trigrams$Term), " "), "[", 2)
+trigram3 <- sapply(strsplit(as.character(trigrams$Term), " "), "[", 3)
+trigramFull <- as.character(trigrams$Term)
+trigramFreq <- trigrams$Frequency
+trigramsDF <- cbind(trigram1, trigram2, trigram3, trigramFull, trigramFreq)
+```
+
+
+
+###Saving Data Frames to Source Onto App
+
+```{r message = FALSE, warning = FALSE}
+## Saving files in current directory
+saveRDS(unigramsDF, file = "unigramsDF.RData")
+saveRDS(bigramsDF, file = "bigramsDF.RData")
+saveRDS(trigramsDF, file = "trigramsDF.RData")
+```
